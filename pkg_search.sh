@@ -3,9 +3,11 @@
 
 if [ "$1" = "" ]; then
     echo No arguments specified.
-    echo RUN:
-    echo '    pkg_search.sh -u'
-    echo '    pkg_search.sh search words'
+    echo Run:
+    echo Update DB files: pkg_search.sh -u
+    echo Search in DESCR: pkg_search.sh [-p fpath] search words ...
+    echo fpath - is optional category name inside ports directory.
+    echo search words ... - words to search inside DESCR files.
     exit
 fi
 
@@ -14,13 +16,13 @@ fi
 CURDIR=`pwd`
 ##pwd
 
-mkdir ~/pkg_search.cache
-cd ~/pkg_search.cache
-##pwd
-
 
 
 if [ "$1" = "-u" ]; then
+
+mkdir ~/pkg_search.cache
+cd ~/pkg_search.cache
+##pwd
 
 echo Updating base...
 
@@ -49,17 +51,34 @@ exit
 
 else
 
+cd ~/pkg_search.cache
+
+if [ "$1" = "-p" ]; then
+    if [ "$2" = "" ]; then
+	echo No search path specified.
+	exit
+    fi
+    FPATH=$2
+    shift
+    shift
+fi
+
+
 PATTERN=''
-while [ -n "$1" ]
-do
-PATTERN=$PATTERN' -e '$1
-shift
+while [ -n "$1" ]; do
+    PATTERN=$PATTERN' -e '$1
+    shift
 done
+
+if [ "$PATTERN" = "" ]; then
+    echo No search words specified.
+    exit
+fi
 
 ##echo Searching for: $PATTERN
 ##exit
 
-for fname in $(fgrep -R -i -l $PATTERN ./ports/ | sort | uniq); \
+for fname in $(fgrep -R -i -l $PATTERN ./ports/$FPATH | sort | uniq); \
 do { echo "\n=============================================================================\n" \
 $fname "\n-----------------------------------------------------------------------------"; cat $fname ;} done | more
 
