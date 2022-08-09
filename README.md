@@ -20,4 +20,4 @@ No known bugs. All is feature.
 
 # Thanks
 
-Thanks to Solene Rapenne and t.me/openbsd_ru community for idea to create this script.
+Thanks to Solène Rapenne and t.me/openbsd_ru community for idea to create this script.
