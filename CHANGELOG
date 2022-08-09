@@ -1,0 +1,16 @@
+1.1 (20220809)
+--------------
+* choose ports tree path to search - add option "-p"
+* add supplemental files
+
+1.0 (20220808)
+--------------
+* it's a running script!
+* release/snapshot supported
+* two parts to: update DB, search data
+
+0.1 (20210509)
+--------------
+* draft CLI sketches in notebook
+* which file to download depending on version
+* how to find in DESCR
