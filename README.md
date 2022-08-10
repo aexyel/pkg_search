@@ -1,6 +1,11 @@
-# pkg_search
+# (Yet another) pkg_search
 
 CLI tool to search OpenBSD packages by DESCR content.
+
+## Why?
+
+* No need to install sqlports, pkglocatedb and other tools.
+* Just remove ~/pkg_search.cache and your system will be tidy and clean again!
 
 # How to use
 
