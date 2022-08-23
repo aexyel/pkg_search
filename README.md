@@ -17,6 +17,8 @@ Use `pkg_search some words` to search in port's DESCR files.
 
 # TODO
 
+Add -f(orce) to updates.
+
 Refactor code. It's too draft.
 
 # Bugs / limitation
