@@ -23,7 +23,9 @@ Refactor code. It's too draft.
 
 # Bugs / limitation
 
-No known bugs. All is feature.
+Won't download ports archive after moving build from -current to next version.
+
+One known bug. All other is feature.
 
 # Thanks
 
