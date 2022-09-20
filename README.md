@@ -9,7 +9,7 @@ CLI tool to search OpenBSD packages by DESCR content.
 
 # How to use
 
-Run `pkg_search -u` to update and extract ports archive to ~/pkg_search.cache directory.
+Run `pkg_search -u[s]` to update and extract ports archive to ~/pkg_search.cache directory.
 
 Use `pkg_search some words` to search in port's DESCR files.
 
@@ -24,6 +24,7 @@ Refactor code. It's too draft.
 # Bugs / limitation
 
 Won't download ports archive after moving build from -current to next version.
+FIX: '-us' forces to use snapshot anyway.
 
 One known bug. All other is feature.
 

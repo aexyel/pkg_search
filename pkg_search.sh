@@ -4,7 +4,7 @@
 if [ "$1" = "" ]; then
     echo No arguments specified.
     echo Run:
-    echo Update DB files: pkg_search.sh -u
+    echo Update DB files: pkg_search.sh -u[s]
     echo Search in DESCR: pkg_search.sh [-p fpath] search words ...
     echo fpath - is optional category name inside ports directory.
     echo search words ... - words to search inside DESCR files.
@@ -18,7 +18,7 @@ CURDIR=`pwd`
 
 
 
-if [ "$1" = "-u" ]; then
+if [[ "$1" = "-u" || "$1" = "-us" ]]; then
 
 mkdir ~/pkg_search.cache
 cd ~/pkg_search.cache
@@ -31,6 +31,11 @@ sysctl -n kern.version | fgrep -e current -e beta > /dev/null && RELEASE='snapsh
 ## > /dev/null
 ##echo $RELEASE
 ##cat /etc/installurl
+
+if [ "$1" = "-us" ]; then
+RELEASE='snapshots'
+echo Forced to snapshot.
+fi
 
 WU='no'
 ftp -T $(grep -v -e "#" -e "^[ \t]*$" /etc/installurl | head -n 1)/$RELEASE/ports.tar.gz && WU='yes'
