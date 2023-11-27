@@ -64,14 +64,18 @@ if [ "$1" = "-p" ]; then
 	exit
     fi
     FPATH=$2
+    KEYWORDS=$3
     shift
     shift
+  else
+    KEYWORDS=$1
 fi
 
 
 PATTERN=''
 while [ -n "$1" ]; do
     PATTERN=$PATTERN' -e '$1
+    KEYWORDS=$KEYWORDS'|'$1
     shift
 done
 
@@ -80,12 +84,12 @@ if [ "$PATTERN" = "" ]; then
     exit
 fi
 
-##echo Searching for: $PATTERN
-##exit
+## echo Searching for: $KEYWORDS
+## exit
 
 for fname in $(fgrep -R -i -l $PATTERN ./ports/$FPATH | sort | uniq); \
 do { echo "\n=============================================================================\n" \
-$fname "\n-----------------------------------------------------------------------------"; cat $fname ;} done | more
+$fname "\n-----------------------------------------------------------------------------"; cat $fname ;} done | less -i -p "$KEYWORDS"
 
 cd $CURDIR
 ##pwd
