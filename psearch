@@ -1,0 +1,276 @@
+#!/bin/ksh
+# TODO:
+# [ ] check make vars for shell injection (see ports/www/py-responses/Makefile:COMMENT)
+# [X] exit/kill event
+# [X] get make var via make command
+# [X] check df in work dir
+# [ ] check updates for current via last modify time in http head and releases via sha256 
+
+usage="Usage: $0 [-u | -s] | [[-c category] keyword ...]
+-u		- check for updates and rebuild index
+-s		- same as -u but force snapshot repository
+-c category	- search in ports category
+keywords	- words for search"
+
+ACTION='search'
+CATEGORY='.*'
+
+while getopts usc: param
+do
+	case "$param" in
+	u)	ACTION='update' ;;
+	s)	ACTION='force_snap' ;;
+	c)	CATEGORY="^$OPTARG\/" ;;
+	?)	echo "$usage"; exit 2 ;;
+	esac
+done
+shift $(($OPTIND - 1))
+
+[ -z "$*" -a "$ACTION" = "search" ] && {
+	echo "$usage"
+  exit 0
+}
+
+WORDS="$@"
+idx=~/.psearch_idx
+
+RELEASE=$(uname -r)
+sysctl -n kern.version | fgrep -e current -e beta > /dev/null && RELEASE='snapshots'
+#кол-во потоков можно выставлять вручную
+cores=$(sysctl -n hw.ncpu) || cores=1
+
+[ "$ACTION" = "force_snap" ] && {
+  RELEASE='snapshots'
+  echo Forced to snapshot.
+}
+
+install_url="$(grep -v -e '#' -e '^[ \t]*$' /etc/installurl | head -n 1)"
+ports_url="$install_url/$RELEASE/ports.tar.gz"
+WD=""
+
+log() {
+  echo "$(date): $1" | tee -a ~/.psearch.log
+}
+die() {
+  log "$(date) ERROR: $1"
+  exit 1;
+}
+
+#[ "$RELEASE" != "snapshots" ] && {
+#  sha_path="$install_url/$RELEASE/SHA256"
+#  remote_sha="$(ftp -MVo- $sha_path)" || die "Can't get remote sha256"
+#  remote_sha="$(echo "$remote_sha" | sed -En 's/^SHA256 \(ports\.tar\.gz\) = ([a-z0-9]*)$/\1/p')"
+#  local_sha="$(tail -n1 $idx)"
+#  [ "$remote_sha" = "$local_sha" ] && {
+#    log "Up to date." 
+#    [ "$param" = "-u" ] && exit 0
+#  } || log "Index outdated"
+#  true
+#}
+check_ports_outdate() {
+  local portspath="$(echo "$install_url" | sed -En 's|https?\://[^/]*(/.*)|\1|p')/$RELEASE/ports.tar.gz"
+  #local local_time="$(stat -t %s -f %m $idx)"
+  local local_time="$(tail -n1 $idx)"
+  local host="$(echo "$install_url" | sed -En 's|https?\://([^/]*).*|\1|p')"
+  local http_req="HEAD $portspath HTTP/1.0\r\nHost: $host\r\n\r\n"
+  local last_modified="$(echo -ne "$http_req" | nc $host 80)"
+  # TODO: error event
+  last_modified="$(echo "$last_modified" | sed -En 's/^Last-Modified: (.*)$/\1/p')" 
+  #remote_time="$(date -jf '%a, %d %b %Y %T %z' +"%s" "$last_modified")"
+  [ -z "$local_time" -o "$local_time" != "$last_modified" ] && echo "$last_modified"
+}		
+getmakevar() {
+	local _var="$1"
+	local _dir="$(dirname $2)"
+	cd $_dir
+	make -f - ${_var}.print <<EOF
+include Makefile
+$_var.print: ; @echo "\$($_var)"
+EOF
+}
+#tests:
+#WD=$HOME/pkg_search_73
+#export PORTSDIR_PATH=$WD/ports
+#export PORTSDIR=$WD/ports
+##getmakevar "COMMENT" $WD/ports/mail/thunderbird-i18n/Makefile
+#for varname in V VER VERSION GH_TAGNAME PKGNAME DISTNAME COMMENT
+#do
+#  echo $varname
+#	getmakevar "$varname" $WD/ports/textproc/p5-XML-RSSLite/Makefile
+#	getmakevar "$varname" $WD/ports/www/py-responses/Makefile
+#done
+#exit
+# Shell analog for get vars from makefile
+#getmakevar() {
+#  local _rlevel=0
+#  [ -n "$3" ] && _rlevel=$3
+##echo "STARTVAR ]$1[ ($2)">&2
+#  local _var="$1" #"$(echo -n $1| sed 's/[\\\/\.\]\[\}\{\$\^\&\(\)\*\-]/\\&/g')"
+#  #local _var="$(echo -n "$1" | sed -E 's|:[^ ]*||g')"
+#  [ -z "$_var" ] && { echo "empty varname in $_makefile" >&2; return 0; }
+#  local _makefile="$2"
+#  local _value="$(sed -En 's|^'"$_var"'[[:blank:]]*=[[:blank:]]*(.*)|\1|p' $_makefile | tr -d "\n")"
+#  [ -z "$_value" ] && {
+##echo "empty value: $1 in $_makefile" >&2; 
+#    return 0;
+#  }
+##echo "startwith $_var: ($_value)" >&2
+#  [ -z "$(echo -n "$_value" | sed -En 's/.*(\${[^\}]*}).*/\1/p' | tr -d "\n")" ] && { 
+##echo "RETURN $_var: $_value" >&2
+#    echo -n $_value
+#    return 0
+#  }
+##echo "working with $_var: $_value" >&2
+#  local _subvars="$(echo -n "$_value" | sed -E 's|\}[^\$]*| |g;s|^[^$]*\$\{||g;s|\$\{||g;s/ $//'| tr -d "\n")"
+#  for _subvar in $_subvars
+#  do
+##echo "subvars: $_subvars in ($_value)" >&2
+#    local _clean_subvar="$(echo -n "$_subvar" | sed -E 's|:[^ ]*||g')"
+#    ((_rlevel++))
+#    local _subval="$(getmakevar "$_clean_subvar" "$_makefile" $_rlevel)"
+##echo "[$_rlevel] subval of '$_subvar' ($_clean_subvar): $_subval" >&2
+#    _subvar="$(echo -n "$_subvar"| sed 's/[\\\/|]/\\&/g')"
+#    _subval="$(echo -n "$_subval"| sed 's/[\\\/|]/\\&/g')"
+#    _value="$(echo -n "$_value" | sed 's|\${'"$_subvar"'}|'"$_subval"'|g'| tr -d "\n")"
+#  done
+##echo "retval: $_value">&2 
+#  echo -n $_value
+#}
+
+df_avail() {
+  local _dir="$1"
+  local _avail="$(df -k $_dir | awk '{print $4}' | tail -1)"
+  printf '%d' "$_avail"
+}
+
+rebuild_idx() {
+  local new_time="$1"
+#для тестов отключить рандомную папку каждый раз и ее удаление в конце
+  local tmp_avail=$(df_avail /tmp)
+  [ $tmp_avail -gt 1100000 ] && {
+    WD=/tmp
+    true
+  } || {
+    log "No space left at /tmp (need > 1Gb). trying home dir..."
+
+    [ -z "$WD" -a $(df_avail ~/) -gt 1100000 ] && {
+      WD=~/
+      true
+    } || {
+      die "No space left at ~/ (need > 1Gb)"
+      return 1
+    }
+  }
+	WD=`mktemp -d -p $WD psearch_XXXXXXXXXX` || exit 1
+	local flist=$WD/allfiles
+
+	cd $WD
+	log "Work dir: $WD"
+	export PORTSDIR_PATH=$WD/ports
+	export PORTSDIR=$WD/ports
+	ftp $ports_url || die "Ports download error"
+  log "Unpacking ports.."
+	tar -xzf ports.tar.gz || die "Ports unpacking error"
+	
+  #time tar -tzf ports.tar.gz | \
+	#  fgrep -i -e "/DESCR" -e "/Makefile" | \
+	#  tar -xzf ports.tar.gz -I /dev/fd/0
+	log "Building DESCR files list"
+  find ports -type f -name 'DESCR*' > $flist
+	log "Spliting list"
+	local tlines=$(echo $(wc -l < $flist))
+	local lines=$((tlines/cores))
+	split -l $lines $flist ${flist}_ 
+	log "Building index from $tlines ports..."
+	for f in ${flist}_*
+	do
+	  local part_idx="${f}.part.idx"
+	  log "parsing $f to $part_idx"
+	  while read -r fullname
+	  do
+	    [ ! -f "$fullname" ] && die "Bad DESCR $fullname"
+	    local makefile="$(dirname $fullname)/../Makefile"
+	    local comment=''
+	    local version=''
+	    local home_page=''
+	    local level="$(echo "$makefile" | awk -F"/" '{print NF-1}')"
+			[ $level -eq 4 ] && makefile="$(dirname $fullname)/Makefile"
+	    [ -f "$makefile" ] && {
+				local descrfile="$(basename $fullname)"
+				local flavor="-${descrfile##DESCR-}"
+				[ "$flavor" = "-DESCR" ] && flavor=""
+	      local comment="$(getmakevar "COMMENT$flavor" "$makefile")"
+	      [ -z "$comment" ] && comment="$(getmakevar 'COMMENT-main' "$makefile")"
+	      [ -z "$comment" ] && {
+					log "comment detect error in $makefile"
+					echo "$fullname" >> $WD/badfiles
+				}
+        #log "parse $makefile, $fullname"
+	      #[ -z "$comment" -a $level -eq 4 ] && log "comment detect error in $makefile"
+	      for varname in PKGNAME DISTNAME V VER VERSION GH_TAGNAME
+	      do
+	        local version="$(getmakevar "$varname" "$makefile")"
+	        [ -n "$version" ] && break
+	      done
+	      #[ -z "$version" -a $level -eq 4 ] && log "version detect error in $makefile"
+	      [ -z "$version" ] && {
+					log "version detect error in $makefile"
+					echo "$fullname" >> $WD/badfiles
+				}
+        home_page="$(getmakevar "HOMEPAGE" "$makefile")"
+	      true
+	    } || die "makefile '$makefile' not found"
+	
+	    echo -n "$fullname" | cut -d'/' -f 2-3 | tr '\n' '│' >> $part_idx
+	    echo "$version$flavor $comment\n" | tr '\n' '│' >> $part_idx
+	    tr '\n' '│' < $fullname >> $part_idx
+	    echo "\n$home_page" | tr '\n' '│' >> $part_idx
+      echo >> $part_idx
+	  # закомментить & если нужен 1 поток
+	  done < $f &
+	done
+	time wait
+	cat ${flist}_*.part.idx > $idx
+	echo "$new_time" >> $idx
+	sort badfiles | uniq > $flist
+  log "Все ошибочные порты сохранены в $flist"
+	rm -f $WD/allfiles_*
+	rm -f $WD/badfiles
+	echo "Удаление рабочей папки в этой версии отключено для отладки"
+  #rm -rf $WD
+
+}
+
+quit(){
+  echo
+  log "Abort detected! Exiting.."
+  local _myjobs="`jobs -p`"
+  [ -n "$_myjobs" ] && {
+    log "killing jobs.."
+    kill $_myjobs
+  }
+  #log "deleting $WD..."
+  #rm -rf $WD
+}
+
+log starting
+trap quit SIGHUP SIGINT SIGTERM
+# поиск:
+[ "$ACTION" = "search" ] && {
+  [ ! -f $idx ] && die "Index file not found, try $0 -u"
+  search_words="-e $(echo "$WORDS" | sed 's/ / -e /g')"
+  highlight_words="$(echo "$WORDS" | sed 's/ /|/g')"
+  sed -Ene '/'$CATEGORY'/p' $idx | grep -i $search_words | \
+  sed -En 's/^([^│]*)/============================[\1]==============================/p' | \
+  tr '│' '\n' | less -iFX -p "$highlight_words"
+  exit 0
+}
+
+new_time="$(check_ports_outdate)"
+[ -z "$new_time" ] && {
+  log "Up to date."
+  true
+} || {
+	log "Index outdated, new time: $new_time"
+	rebuild_idx "$new_time"
+}
