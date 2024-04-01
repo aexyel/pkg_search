@@ -1,6 +1,7 @@
 #!/bin/ksh
 # TODO:
-# [ ] check make vars for shell injection (see ports/www/py-responses/Makefile:COMMENT)
+# [ ] check and work with http_proxy env var in check_ports_outdate function
+# [X] check make vars for shell injection (see ports/www/py-responses/Makefile:COMMENT)
 # [X] exit/kill event
 # [X] get make var via make command
 # [X] check df in work dir
@@ -73,19 +74,20 @@ check_ports_outdate() {
   local local_time="$(tail -n1 $idx)"
   local host="$(echo "$install_url" | sed -En 's|https?\://([^/]*).*|\1|p')"
   local http_req="HEAD $portspath HTTP/1.0\r\nHost: $host\r\n\r\n"
-  local last_modified="$(echo -ne "$http_req" | nc $host 80)"
+  local last_modified="$(echo -ne "$http_req" | nc -c $host 443)"
   # TODO: error event
   last_modified="$(echo "$last_modified" | sed -En 's/^Last-Modified: (.*)$/\1/p')" 
   #remote_time="$(date -jf '%a, %d %b %Y %T %z' +"%s" "$last_modified")"
   [ -z "$local_time" -o "$local_time" != "$last_modified" ] && echo "$last_modified"
-}		
+}
+
 getmakevar() {
 	local _var="$1"
 	local _dir="$(dirname $2)"
 	cd $_dir
 	make -f - ${_var}.print <<EOF
 include Makefile
-$_var.print: ; @echo "\$($_var)"
+$_var.print: ; @echo "\${$_var:S/\`/\\\`/g}" # what about $(..)
 EOF
 }
 #tests:
@@ -168,7 +170,7 @@ rebuild_idx() {
 	log "Work dir: $WD"
 	export PORTSDIR_PATH=$WD/ports
 	export PORTSDIR=$WD/ports
-	ftp $ports_url || die "Ports download error"
+	ftp $ports_url || ftp -C $ports_url || ftp -C $ports_url || die "Ports download error"
   log "Unpacking ports.."
 	tar -xzf ports.tar.gz || die "Ports unpacking error"
 	
@@ -193,6 +195,7 @@ rebuild_idx() {
 	    local comment=''
 	    local version=''
 	    local home_page=''
+      local maintainer=''
 	    local level="$(echo "$makefile" | awk -F"/" '{print NF-1}')"
 			[ $level -eq 4 ] && makefile="$(dirname $fullname)/Makefile"
 	    [ -f "$makefile" ] && {
@@ -218,13 +221,14 @@ rebuild_idx() {
 					echo "$fullname" >> $WD/badfiles
 				}
         home_page="$(getmakevar "HOMEPAGE" "$makefile")"
+        maintainer="$(getmakevar "MAINTAINER" "$makefile")"
 	      true
 	    } || die "makefile '$makefile' not found"
 	
 	    echo -n "$fullname" | cut -d'/' -f 2-3 | tr '\n' '│' >> $part_idx
 	    echo "$version$flavor $comment\n" | tr '\n' '│' >> $part_idx
 	    tr '\n' '│' < $fullname >> $part_idx
-	    echo "\n$home_page" | tr '\n' '│' >> $part_idx
+	    echo -n "\n$home_page\n$maintainer" | tr '\n' '│' >> $part_idx
       echo >> $part_idx
 	  # закомментить & если нужен 1 поток
 	  done < $f &
@@ -261,8 +265,9 @@ trap quit SIGHUP SIGINT SIGTERM
   search_words="-e $(echo "$WORDS" | sed 's/ / -e /g')"
   highlight_words="$(echo "$WORDS" | sed 's/ /|/g')"
   sed -Ene '/'$CATEGORY'/p' $idx | grep -i $search_words | \
-  sed -En 's/^([^│]*)/============================[\1]==============================/p' | \
-  tr '│' '\n' | less -iFX -p "$highlight_words"
+    sed 's/$/ \(maintainer\)/' | \
+    sed -En 's/^([^│]*)/============================[\1]==============================/p' | \
+    tr '│' '\n' | less -iFX -p "$highlight_words"
   exit 0
 }
 
