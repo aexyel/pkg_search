@@ -74,27 +74,30 @@ check_ports_outdate() {
   local local_time="$(tail -n1 $idx)"
   local host="$(echo "$install_url" | sed -En 's|https?\://([^/]*).*|\1|p')"
   local http_req="HEAD $portspath HTTP/1.0\r\nHost: $host\r\n\r\n"
-  local last_modified="$(echo -ne "$http_req" | nc -c $host 443)"
-  # TODO: error event
+  local last_modified="$(echo -ne "$http_req" | nc -c $host 443)" 
+  [ -z "$last_modified" ] && return 1
   last_modified="$(echo "$last_modified" | sed -En 's/^Last-Modified: (.*)$/\1/p')" 
   #remote_time="$(date -jf '%a, %d %b %Y %T %z' +"%s" "$last_modified")"
   [ -z "$local_time" -o "$local_time" != "$last_modified" ] && echo "$last_modified"
+  return 0
 }
 
 getmakevar() {
 	local _var="$1"
 	local _dir="$(dirname $2)"
 	cd $_dir
-	make -f - ${_var}.print <<EOF
+	make -f - ${_var}.print <<EOF || return 1
 include Makefile
-$_var.print: ; @echo "\${$_var:S/\`/\\\`/g}" # what about $(..)
+$_var.print: ; @echo \${$_var:Q}
 EOF
+  return 0
 }
 #tests:
-#WD=$HOME/pkg_search_73
+#WD=/tmp/psearch_eUvPF5eW14
 #export PORTSDIR_PATH=$WD/ports
 #export PORTSDIR=$WD/ports
-##getmakevar "COMMENT" $WD/ports/mail/thunderbird-i18n/Makefile
+#getmakevar "COMMENT-main" $WD/ports/databases/lbdb/Makefile
+#exit
 #for varname in V VER VERSION GH_TAGNAME PKGNAME DISTNAME COMMENT
 #do
 #  echo $varname
@@ -149,17 +152,17 @@ rebuild_idx() {
   local new_time="$1"
 #для тестов отключить рандомную папку каждый раз и ее удаление в конце
   local tmp_avail=$(df_avail /tmp)
-  [ $tmp_avail -gt 1100000 ] && {
+  [ $tmp_avail -gt 600000 ] && {
     WD=/tmp
     true
   } || {
-    log "No space left at /tmp (need > 1Gb). trying home dir..."
+    log "No space left at /tmp (need > 600MB). trying home dir..."
 
-    [ -z "$WD" -a $(df_avail ~/) -gt 1100000 ] && {
+    [ -z "$WD" -a $(df_avail ~/) -gt 600000 ] && {
       WD=~/
       true
     } || {
-      die "No space left at ~/ (need > 1Gb)"
+      die "No space left at ~/ (need > 600MB)"
       return 1
     }
   }
@@ -170,7 +173,7 @@ rebuild_idx() {
 	log "Work dir: $WD"
 	export PORTSDIR_PATH=$WD/ports
 	export PORTSDIR=$WD/ports
-	ftp $ports_url || ftp -C $ports_url || ftp -C $ports_url || die "Ports download error"
+	ftp $ports_url || ftp -C $ports_url || die "Ports download error"
   log "Unpacking ports.."
 	tar -xzf ports.tar.gz || die "Ports unpacking error"
 	
@@ -202,7 +205,7 @@ rebuild_idx() {
 				local descrfile="$(basename $fullname)"
 				local flavor="-${descrfile##DESCR-}"
 				[ "$flavor" = "-DESCR" ] && flavor=""
-	      local comment="$(getmakevar "COMMENT$flavor" "$makefile")"
+ 	      local comment="$(getmakevar "COMMENT$flavor" "$makefile")"
 	      [ -z "$comment" ] && comment="$(getmakevar 'COMMENT-main' "$makefile")"
 	      [ -z "$comment" ] && {
 					log "comment detect error in $makefile"
@@ -224,7 +227,7 @@ rebuild_idx() {
         maintainer="$(getmakevar "MAINTAINER" "$makefile")"
 	      true
 	    } || die "makefile '$makefile' not found"
-	
+
 	    echo -n "$fullname" | cut -d'/' -f 2-3 | tr '\n' '│' >> $part_idx
 	    echo "$version$flavor $comment\n" | tr '\n' '│' >> $part_idx
 	    tr '\n' '│' < $fullname >> $part_idx
@@ -242,7 +245,6 @@ rebuild_idx() {
 	rm -f $WD/badfiles
 	echo "Удаление рабочей папки в этой версии отключено для отладки"
   #rm -rf $WD
-
 }
 
 quit(){
@@ -257,7 +259,6 @@ quit(){
   #rm -rf $WD
 }
 
-log starting
 trap quit SIGHUP SIGINT SIGTERM
 # поиск:
 [ "$ACTION" = "search" ] && {
@@ -271,7 +272,7 @@ trap quit SIGHUP SIGINT SIGTERM
   exit 0
 }
 
-new_time="$(check_ports_outdate)"
+new_time="$(check_ports_outdate)" || die "Can't check for update"
 [ -z "$new_time" ] && {
   log "Up to date."
   true
