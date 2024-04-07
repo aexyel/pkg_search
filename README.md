@@ -31,8 +31,12 @@ FIX: '-us' forces to use snapshot anyway.
 One known bug. All other is feature.
 
 # PSEARCH
+(Reimplementation by @vasyahacker)
+- Building index file in you home dir (~4Mb)
+- Instant offline search by category, portname, comment, description
+## Funny video intro
+[![psearch intro](https://img.youtube.com/vi/ngctiHmeNT4/0.jpg)](https://www.youtube.com/watch?v=ngctiHmeNT4)
 
-Reimplementation by @vasyahacker
 
 ## Usage
 
