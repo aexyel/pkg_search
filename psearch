@@ -1,10 +1,6 @@
 #!/bin/ksh
 # TODO:
 # [ ] check and work with http_proxy env var in check_ports_outdate function
-# [X] check make vars for shell injection (see ports/www/py-responses/Makefile:COMMENT)
-# [X] exit/kill event
-# [X] get make var via make command
-# [X] check df in work dir
 # [ ] check updates for current via last modify time in http head and releases via sha256 
 
 usage="Usage: $0 [-u | -s] | [[-c category] keyword ...]
@@ -86,10 +82,7 @@ getmakevar() {
 	local _var="$1"
 	local _dir="$(dirname $2)"
 	cd $_dir
-	make -f - ${_var}.print <<EOF || return 1
-include Makefile
-$_var.print: ; @echo \${$_var:Q}
-EOF
+  make show=$_var
   return 0
 }
 #tests:
