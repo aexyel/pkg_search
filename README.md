@@ -45,3 +45,7 @@ psearch [-u | -s] | [[-c category] keyword ...]
 # Thanks
 
 Thanks to Solène Rapenne and t.me/openbsd_ru community for idea to create this script.
+
+# About
+## OpenBaSeD project
+Our goal is writing code for basic OpenBSD installation without external dependencies.
